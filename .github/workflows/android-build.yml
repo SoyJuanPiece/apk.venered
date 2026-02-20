@@ -15,8 +15,8 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
           java-version: '17'
+          distribution: 'temurin'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -24,26 +24,33 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Set up Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Install npm dependencies
         run: npm install
 
       - name: Create Android assets directory
         run: mkdir -p android/app/src/main/assets
 
-      - name: Build JS Bundle and Assets for Production
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: NODE_ENV=production npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
+      - name: Build JS Bundle and Assets
+        run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Build universal debug APK
-        run: cd android && ./gradlew assembleDebug --no-daemon
+      - name: Build universal release APK
+        run: cd android && ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-universal-offline
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: app-release-offline
+          path: android/app/build/outputs/apk/release/app-release.apk
