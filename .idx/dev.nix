@@ -1,34 +1,55 @@
-{ pkgs, ... }: {
-  channel = "stable-23.11";
+{ pkgs, ... }: 
+let
+  # Definimos el SDK de Android en una variable para que sea más limpio
+  androidSdk = (pkgs.androidenv.composeAndroidPackages {
+    abiVersions = [ "x86_64" ];
+    platformVersions = [ "33" ];
+    includeEmulator = true;
+    sdkmanager-components = [
+      "platform-tools"
+      "emulator"
+      "cmdline-tools;latest"
+      "system-images;android-33;google_apis;x86_64"
+      "platforms;android-33"
+      "build-tools;33.0.2"
+    ];
+  }).androidsdk;
+in {
+  channel = "unstable";
 
+  # Usamos la variable definida arriba
   packages = [
-    pkgs.nodejs_20
-    pkgs.jdk17
-    pkgs.android-tools
-    # Nota: Quitamos pkgs.android-sdk porque causa conflictos en la configuración simple
+    androidSdk
+    pkgs.coreutils # Recomendado para comandos básicos de shell
   ];
 
   idx = {
     extensions = [ "esbenp.prettier-vscode" ];
-    
+
     workspace = {
       onCreate = {
         setup = ''
-          # 1. Permisos
-          chmod +x android/gradlew
+          # Crear el AVD automáticamente si no existe para ahorrar tiempo
+          echo "no" | avdmanager create avd -n "venered-emu" -k "system-images;android-33;google_apis;x86_64" --force
           
-          # 2. Carpetas en /home (espacio libre)
-          mkdir -p /home/user/.gradle_home
-          mkdir -p /home/user/.android_cache
-          mkdir -p /home/user/.build_tmp
-          
-          # 3. Forzar el local.properties con la ruta interna de IDX
-          # Usamos /lib/android/sdk que es donde IDX lo monta por defecto
-          echo "sdk.dir=/lib/android/sdk" > android/local.properties
+          clear
+          echo "------------------------------------------------------------------";
+          echo "✅ Entorno de Emulación para Venered (Configuración Corregida)";
+          echo "------------------------------------------------------------------";
+          echo "SDK de Android configurado correctamente.";
+          echo "";
+          echo "WORKFLOW:";
+          echo "";
+          echo "  1. INICIA EL EMULADOR:";
+          echo "     emulator -avd venered-emu -no-snapshot -grpc-use-token";
+          echo "";
+          echo "  2. INSTALA TU APK (en otra terminal):";
+          echo "     adb install ./app-release-offline.apk";
+          echo "------------------------------------------------------------------";
         '';
       };
     };
-    
+
     previews = {
       enable = false;
     };
