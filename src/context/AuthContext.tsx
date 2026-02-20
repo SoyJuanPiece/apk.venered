@@ -87,6 +87,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     bootstrapAsync();
   }, []);
 
+  // --- DEBUG: Force loading to end after 10 seconds ---
+  useEffect(() => {
+    if (!state.isLoading) return; // Do nothing if loading is already finished
+
+    console.log("DEBUG: Starting emergency timeout for loading screen...");
+    const timer = setTimeout(() => {
+      console.log("DEBUG: Emergency timeout triggered! Forcing loading to finish.");
+      dispatch({ type: 'RESTORE_TOKEN', payload: null });
+    }, 10000); // 10 seconds
+
+    return () => clearTimeout(timer);
+  }, [state.isLoading]);
+
   const authContext: AuthContextType = {
     user: state.user,
     session: state.session,
