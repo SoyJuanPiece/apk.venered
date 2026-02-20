@@ -30,8 +30,8 @@ jobs:
       - name: Create Android assets directory
         run: mkdir -p android/app/src/main/assets
 
-      - name: Build JS Bundle and Assets
-        run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
+      - name: Build JS Bundle and Assets for Production
+        run: NODE_ENV=production npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
