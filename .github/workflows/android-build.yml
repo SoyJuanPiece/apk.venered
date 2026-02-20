@@ -27,11 +27,17 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
+      - name: Create Android assets directory
+        run: mkdir -p android/app/src/main/assets
+
+      - name: Build JS Bundle and Assets
+        run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res/
+
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Build Self-Contained Universal Debug APK
-        run: cd android && ./gradlew bundleReleaseJsAndAssets assembleDebug --no-daemon
+      - name: Build universal debug APK
+        run: cd android && ./gradlew assembleDebug --no-daemon
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
