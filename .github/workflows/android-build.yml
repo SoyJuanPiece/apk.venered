@@ -32,7 +32,7 @@ jobs:
           ./gradlew bundleRelease
           
       - name: Upload App Bundle
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # <-- CORREGIDO A v4
         with:
           name: app-release-mocked
           path: android/app/build/outputs/bundle/release/app-release.aab
