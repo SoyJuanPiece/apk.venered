@@ -17,4 +17,4 @@ rootProject.name = 'Venered'
 
 include ':app'
 
-apply from: '../node_modules/react-native/android/dependencies.gradle'
+apply from: '../../node_modules/react-native/android/dependencies.gradle'
