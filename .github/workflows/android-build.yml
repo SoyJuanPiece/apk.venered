@@ -34,7 +34,6 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Install dependencies
-        # We need to be inside the project folder
         working-directory: ./Venered
         run: npm install
 
