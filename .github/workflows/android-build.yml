@@ -1,4 +1,4 @@
-name: Build Mocked APK
+name: Generate Mocked APK
 
 on:
   push:
@@ -34,18 +34,19 @@ jobs:
             ${{ runner.os }}-gradle-
 
       - name: Install dependencies
+        # We need to be inside the project folder
+        working-directory: ./Venered
         run: npm install
 
       - name: Generate debug keystore
-        run: keytool -genkey -v -keystore android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        run: keytool -genkey -v -keystore Venered/android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
       - name: Build Android APK (Debug)
-        run: |
-          cd android
-          ./gradlew assembleDebug --no-daemon
+        working-directory: ./Venered/android
+        run: ./gradlew :app:assembleDebug --no-daemon
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug-mocked
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: Venered/android/app/build/outputs/apk/debug/app-debug.apk
