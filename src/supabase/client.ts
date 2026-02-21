@@ -1,31 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { mockSupabase } from '../__mocks__/supabase';
 
-const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY || '';
+// --- FORZANDO MODO SIMULADO ---
+// Se ha eliminado la lógica de variables de entorno para usar siempre el cliente simulado.
 
-const isConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+console.log('⚠️  Forzando MODO SIMULADO. Usando MOCK Supabase client.');
+const supabase: any = mockSupabase;
 
-// Use mock if no real credentials
-let supabase: any;
+// --- FIN DEL CAMBIO ---
 
-if (isConfigured) {
-  console.log('✅ Using real Supabase client');
-  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      storage: undefined,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  });
-} else {
-  console.log('⚠️  Using MOCK Supabase client (development mode)');
-  supabase = mockSupabase;
-}
-
-// Helper functions
-export const isSupabaseConfigured = (): boolean => isConfigured;
+// El resto de las funciones de ayuda se mantienen igual.
+export const isSupabaseConfigured = (): boolean => false; // Siempre devuelve false.
 
 export const handleSupabaseError = (
   error: any,
