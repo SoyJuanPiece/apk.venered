@@ -37,6 +37,9 @@ jobs:
         working-directory: ./Venered
         run: npm install
 
+      - name: Delete existing debug keystore
+        run: rm -f Venered/android/app/debug.keystore
+
       - name: Generate debug keystore
         run: keytool -genkey -v -keystore Venered/android/app/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
 
