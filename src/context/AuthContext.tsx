@@ -2,61 +2,43 @@ import React, {
   createContext,
   useContext,
   useEffect,
-  useCallback,
   useReducer,
+  useCallback,
 } from 'react';
+import supabase from '../supabase/client'; // Importar el cliente directamente
 import { AuthService } from '../services/auth';
 import {
-  User,
   LoginCredentials,
   SignUpData,
   AuthSession,
   AuthContextType,
 } from '../types';
 
+// El estado ahora es más simple: solo la sesión y el estado de carga.
 type AuthState = {
-  user: User | null;
   session: AuthSession | null;
   isLoading: boolean;
-  isSignout: boolean;
 };
 
 type AuthAction =
-  | { type: 'RESTORE_TOKEN'; payload: AuthSession | null }
-  | { type: 'SIGN_IN'; payload: AuthSession }
-  | { type: 'SIGN_UP'; payload: AuthSession }
-  | { type: 'SIGN_OUT' }
-  | { type: 'SET_ERROR'; payload: string };
+  | { type: 'SET_SESSION'; payload: AuthSession | null }
+  | { type: 'SET_LOADING'; payload: boolean };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const authReducer = (state: AuthState, action: AuthAction): AuthState => {
   switch (action.type) {
-    case 'RESTORE_TOKEN':
+    case 'SET_SESSION':
       return {
         ...state,
-        user: action.payload?.user || null,
-        session: action.payload || null,
-        isLoading: false,
-      };
-
-    case 'SIGN_IN':
-    case 'SIGN_UP':
-      return {
-        ...state,
-        user: action.payload.user,
         session: action.payload,
-        isSignout: false,
+        isLoading: false, // El estado de la sesión ya se conoce, la carga ha terminado.
       };
-
-    case 'SIGN_OUT':
+    case 'SET_LOADING':
       return {
         ...state,
-        user: null,
-        session: null,
-        isSignout: true,
+        isLoading: action.payload,
       };
-
     default:
       return state;
   }
@@ -66,64 +48,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const [state, dispatch] = useReducer(authReducer, {
-    user: null,
     session: null,
-    isLoading: true,
-    isSignout: false,
+    isLoading: true, // La app siempre inicia en estado de carga.
   });
 
-  // Restaurar sesión al iniciar app
+  // Este useEffect es el corazón de la nueva arquitectura.
+  // Se suscribe a los cambios de autenticación directamente desde Supabase.
   useEffect(() => {
-    const bootstrapAsync = async () => {
-      try {
-        const session = await AuthService.restoreSession();
-        dispatch({ type: 'RESTORE_TOKEN', payload: session });
-      } catch (e) {
-        console.warn('Failed to restore session:', e);
-        dispatch({ type: 'RESTORE_TOKEN', payload: null });
-      }
-    };
+    // 1. Inmediatamente al cargar, pedimos la sesión actual. Esto reemplaza `restoreToken`.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      dispatch({ type: 'SET_SESSION', payload: session });
+    });
 
-    bootstrapAsync();
+    // 2. Creamos un "escuchador" que reaccionará a futuros inicios y cierres de sesión.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        dispatch({ type: 'SET_SESSION', payload: session });
+      }
+    );
+
+    // 3. Es crucial cancelar la suscripción cuando el componente se desmonte para evitar fugas de memoria.
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // --- DEBUG: Force loading to end after 10 seconds ---
-  useEffect(() => {
-    if (!state.isLoading) return; // Do nothing if loading is already finished
-
-    console.log("DEBUG: Starting emergency timeout for loading screen...");
-    const timer = setTimeout(() => {
-      console.log("DEBUG: Emergency timeout triggered! Forcing loading to finish.");
-      dispatch({ type: 'RESTORE_TOKEN', payload: null });
-    }, 10000); // 10 seconds
-
-    return () => clearTimeout(timer);
-  }, [state.isLoading]);
-
   const authContext: AuthContextType = {
-    user: state.user,
+    // Estado expuesto a los componentes hijos
+    user: state.session?.user ?? null,
     session: state.session,
     isLoading: state.isLoading,
-    isSignout: state.isSignout,
+    isSignout: !state.session && !state.isLoading,
 
+    // Métodos que llaman al AuthService. Ya no necesitan despachar acciones.
     signIn: useCallback(async (credentials: LoginCredentials) => {
       try {
-        const session = await AuthService.signIn(credentials);
-        dispatch({ type: 'SIGN_IN', payload: session });
+        await AuthService.signIn(credentials);
+        // El listener `onAuthStateChange` se encargará de actualizar el estado.
       } catch (error: any) {
-        throw error;
+        throw error; // Lanzamos el error para que la UI pueda mostrarlo.
       }
     }, []),
 
     signUp: useCallback(async (data: SignUpData) => {
       try {
         await AuthService.signUp(data);
-        // Auto login después de signup
-        const session = await AuthService.signIn({
-          email: data.email,
-          password: data.password,
-        });
-        dispatch({ type: 'SIGN_UP', payload: session });
+        // En el modo simulado, el signUp no inicia sesión, así que lo hacemos manualmente.
+        await AuthService.signIn({ email: data.email, password: data.password });
       } catch (error: any) {
         throw error;
       }
@@ -132,27 +103,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     signOut: useCallback(async () => {
       try {
         await AuthService.signOut();
-        dispatch({ type: 'SIGN_OUT' });
+        // El listener `onAuthStateChange` también se encargará de esto.
       } catch (error: any) {
         throw error;
       }
     }, []),
 
-    restoreToken: useCallback(async () => {
-      try {
-        const session = await AuthService.restoreSession();
-        dispatch({ type: 'RESTORE_TOKEN', payload: session });
-      } catch (error: any) {
-        console.warn('Error restoring token:', error);
-        dispatch({ type: 'RESTORE_TOKEN', payload: null });
-      }
-    }, []),
+    // La función `restoreToken` ya no es necesaria.
+    restoreToken: async () => {},
   };
 
   return (
-    <AuthContext.Provider value={authContext}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={authContext}>{children}</AuthContext.Provider>
   );
 };
 

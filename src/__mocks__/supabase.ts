@@ -1,13 +1,14 @@
 /*
- * Mock Supabase Client para desarrollo y testing
- * Simula respuestas sin conexion real
+ * Mock Supabase Client v2 (Corregido)
+ * Simula la autenticación y arregla el cuelgue de la pantalla de carga.
  */
 
-import { User, AuthSession, LoginCredentials } from '../types';
+import { User, AuthSession, LoginCredentials, SignUpData } from '../types';
+
+// --- Base de Datos y Sesión Simulada ---
 
 const nowIso = () => new Date().toISOString();
 
-// Mock users database
 const mockUsers: Record<string, User> = {
   'user-0123': {
     id: 'user-0123',
@@ -22,11 +23,10 @@ const mockUsers: Record<string, User> = {
   },
 };
 
-// Simulated session storage
 let currentSession: AuthSession | null = null;
+let authListener: ((event: string, session: AuthSession | null) => void) | null = null;
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(() => resolve(), ms));
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const buildSession = (user: User): AuthSession => ({
   user,
@@ -35,169 +35,91 @@ const buildSession = (user: User): AuthSession => ({
   expires_at: Math.floor(Date.now() / 1000) + 3600,
 });
 
-// Minimal query builder for users table
-const usersQuery = () => {
-  let userId: string | null = null;
-  let updatePayload: Partial<User> | null = null;
-
-  return {
-    select: () => ({
-      eq: (_field: string, value: string) => {
-        userId = value;
-        return {
-          single: async () => {
-            await sleep(100);
-            const user = mockUsers[userId || ''] || null;
-            if (!user) {
-              return { data: null, error: { code: 'PGRST116' } };
-            }
-            return { data: user, error: null };
-          },
-        };
-      },
-    }),
-    insert: async (data: Partial<User>) => {
-      await sleep(100);
-      const id = data.id || `user-${Date.now()}`;
-      mockUsers[id] = {
-        id,
-        email: data.email || 'demo@example.com',
-        username: data.username || 'usuario',
-        display_name: data.display_name || 'Usuario',
-        bio: data.bio,
-        avatar_url: data.avatar_url,
-        website: data.website,
-        is_private: data.is_private ?? false,
-        is_verified: data.is_verified ?? false,
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      } as User;
-      return { data: mockUsers[id], error: null };
-    },
-    update: (payload: Partial<User>) => {
-      updatePayload = payload;
-      return {
-        eq: (_field: string, value: string) => {
-          userId = value;
-          return {
-            select: () => ({
-              single: async () => {
-                await sleep(100);
-                if (!userId || !mockUsers[userId]) {
-                  return { data: null, error: { code: 'PGRST116' } };
-                }
-                mockUsers[userId] = {
-                  ...mockUsers[userId],
-                  ...updatePayload,
-                  updated_at: nowIso(),
-                } as User;
-                return { data: mockUsers[userId], error: null };
-              },
-            }),
-          };
-        },
-      };
-    },
-  };
+// Función para notificar al listener de cambios de sesión
+const notifyListener = (event: string, session: AuthSession | null) => {
+  currentSession = session;
+  if (authListener) {
+    authListener(event, currentSession);
+  }
 };
+
+// --- Mock del Cliente Supabase ---
 
 export const mockSupabase = {
   auth: {
-    signUp: async (data: { email: string; password: string; options?: any }) => {
-      await sleep(200);
-      if (!data.email || !data.password) {
-        return { data: null, error: new Error('Email and password required') };
-      }
-      if (data.password.length < 6) {
-        return {
-          data: null,
-          error: new Error('Password must be at least 6 characters'),
-        };
-      }
+    // LA FUNCIÓN CLAVE QUE FALTABA
+    onAuthStateChange: (callback: (event: string, session: AuthSession | null) => void) => {
+      authListener = callback;
+      // Enviamos el estado inicial de la sesión para que la app no se cuelgue
+      sleep(50).then(() => notifyListener('INITIAL_SESSION', currentSession));
 
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        email: data.email,
-        username: data.options?.data?.username || 'nuevo',
-        display_name: data.options?.data?.display_name || 'Nuevo Usuario',
-        is_private: false,
-        is_verified: false,
-        created_at: nowIso(),
-        updated_at: nowIso(),
-      };
-
-      mockUsers[newUser.id] = newUser;
       return {
-        data: { user: { id: newUser.id } },
-        error: null,
+        data: {
+          subscription: {
+            unsubscribe: () => {
+              authListener = null;
+            },
+          },
+        },
       };
+    },
+
+    // Función para obtener la sesión actual, usada para restaurar
+    getSession: async () => {
+      await sleep(50);
+      return { data: { session: currentSession }, error: null };
     },
 
     signInWithPassword: async (credentials: LoginCredentials) => {
       await sleep(200);
-      const user = Object.values(mockUsers).find(
-        (u) => u.email === credentials.email
-      );
-      if (!user) {
-        return { data: null, error: new Error('invalid_credentials') };
+      const user = Object.values(mockUsers).find(u => u.email === credentials.email);
+      
+      // Usamos una contraseña genérica para el mock
+      if (!user || credentials.password !== 'password123') {
+        return { data: null, error: { message: 'Credenciales inválidas' } };
       }
 
       const session = buildSession(user);
-      currentSession = session;
+      notifyListener('SIGNED_IN', session);
       return { data: { session }, error: null };
     },
 
     signOut: async () => {
       await sleep(100);
-      currentSession = null;
+      notifyListener('SIGNED_OUT', null);
       return { error: null };
     },
-
-    getUser: async () => {
-      await sleep(50);
-      return {
-        data: { user: currentSession?.user || null },
-        error: null,
+    
+    signUp: async (data: SignUpData) => {
+      await sleep(200);
+      const newUser: User = {
+        id: `user-${Date.now()}`,
+        email: data.email,
+        username: data.username || 'nuevo_usuario',
+        display_name: data.display_name || 'Nuevo Usuario',
+        created_at: nowIso(),
+        updated_at: nowIso(),
+        is_private: false,
+        is_verified: false,
       };
+      mockUsers[newUser.id] = newUser;
+      return { data: { user: newUser, session: null }, error: null };
     },
-
-    refreshSession: async (_data: { refresh_token: string }) => {
-      await sleep(150);
-      if (!currentSession) {
-        return { data: { session: null }, error: null };
-      }
-      const session = buildSession(currentSession.user);
-      currentSession = session;
-      return { data: { session }, error: null };
-    },
-
-    updateUser: async (_data: { password: string }) => {
-      await sleep(100);
-      return { error: null };
-    },
-
-    resetPasswordForEmail: async (_email: string) => {
-      await sleep(100);
-      return { error: null };
-    },
+    
+    // Otras funciones simuladas que no hacen nada
+    getUser: async () => ({ data: { user: currentSession?.user || null }, error: null }),
+    refreshSession: async () => ({ data: { session: currentSession }, error: null }),
   },
 
-  from: (table: string) => {
-    if (table === 'users') return usersQuery();
-    return {
-      select: () => ({
-        eq: () => ({
-          single: async () => ({ data: null, error: null }),
-        }),
+  // Mock para consultas de base de datos (devuelve datos vacíos)
+  from: (_table: string) => ({
+    select: () => ({
+      eq: () => ({
+        single: async () => ({ data: null, error: null }),
       }),
-      insert: async () => ({ data: null, error: null }),
-      update: () => ({
-        eq: () => ({
-          select: () => ({ single: async () => ({ data: null, error: null }) }),
-        }),
-      }),
-    };
-  },
+    }),
+    insert: async () => ({ data: null, error: null }),
+  }),
 };
 
 export default mockSupabase;
