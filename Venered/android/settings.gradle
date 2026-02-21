@@ -14,4 +14,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = 'Venered'
-apply from: new File(['node', '--print', "require.resolve('react-native/package.json')"].execute(null, rootDir).text.trim(), '../android/settings.gradle.kts')
+apply from: file('../node_modules/@react-native/gradle-plugin/src/main/settings/settings-react-native.gradle')
+
+include ':app'
